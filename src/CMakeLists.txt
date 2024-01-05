@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16.3)
 
 project(poisson)
-set(CMAKE_INSTALL_PREFIX /store/CETQCD3/tw601/code/2DPoisson)
+set(CMAKE_INSTALL_PREFIX /path/to/src/)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenMP)
