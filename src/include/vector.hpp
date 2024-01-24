@@ -58,6 +58,12 @@ class Vector {
 			for (int i = 0; i < size; i++) data[i] = static_cast<T>(1);
 		}
 
+		void unit(int j)
+		{
+		this->zeros();
+		this->data[j] = 1.0;
+		}
+
 		//set to random normal with mean 0
 		//and std 1
 		void randn()
@@ -93,7 +99,7 @@ class Vector {
 		{
 			assert(size == v.size);
 			T* tmp = new T[v.size];
-			Grid grid_t(v.grid.x,v.grid.y);
+			Grid grid_t(v.grid.p,v.grid.q);
 		#pragma omp parallel for
 			for (int i = 0; i < size; i++) {tmp[i] = data[i] * v.data[i];}
 			Vector<T> newvec(grid_t, tmp);
@@ -115,7 +121,7 @@ class Vector {
                 {
                         assert(size == v.size);
                         T* tmp = new T[v.size];
-			Grid grid_t(v.grid.x,v.grid.y);
+			Grid grid_t(v.grid.p,v.grid.q);
                 #pragma omp parallel for
                         for (int i = 0; i < size; i++) {tmp[i] = data[i] + v.data[i];}
                         Vector<T> newvec(grid_t, tmp);
@@ -136,7 +142,7 @@ class Vector {
                 {
                         assert(size == v.size);
                         T* tmp = new T[v.size];
-			Grid grid_t(v.grid.x,v.grid.y);
+			Grid grid_t(v.grid.p,v.grid.q);
                 #pragma omp parallel for
                         for (int i = 0; i < size; i++) {tmp[i] = data[i] - v.data[i];}
                         Vector<T> newvec(grid_t, tmp);
@@ -153,19 +159,20 @@ class Vector {
 		}*/
 
 		//assignment operator
-		Vector<T> operator=(const Vector<T>& v)
+		void operator=(const Vector<T>& v)
 		{
 			//grid = v.grid;
 			//size = grid.x * grid.y;
-			////this -> size = v.size;
-			////this -> grid = v.grid;
-		////#pragma omp parallel for
-			////for (int i = 0; i < size; i++) {this -> data[i] = v.data[i];}
-			////return *this;
-			if (this == &v) {return *this;}
+			//size = v.size;
+			//grid = v.grid;
+			assert(this->size == v.size);
+		#pragma omp parallel for
+			for (int i = 0; i < size; i++) {data[i] = v.data[i];}
+			//return *this;
+			/*if (this == &v) {return *this;}
 			assert(this -> size == v.size);
 			std::copy(v.data, v.data + v.size, this -> data);
-			return *this;
+			return *this;*/
 		}
 
 		//return the element of the vector given a linear index
