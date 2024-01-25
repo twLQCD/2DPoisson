@@ -25,9 +25,13 @@ extern void coarse_op(const Vector<T>& in, Vector<T>& out, std::vector<T>& weigh
 template<class T>
 extern void LU(const Vector<T>& in, Vector<T>& out);
 
-//applied (L+U) of a coarse grid matrix
+//applies (L+U) of a coarse grid matrix
 template<class T>
 extern void coarse_LU(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights);
+
+//applies Dinv, the inverse of the diagonal of coarse operator A_c
+template<class T>
+extern void coarse_Dinv(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights);
 
 //applies Dinv, the inverse of the diagonal of A
 template<class T>
@@ -35,11 +39,11 @@ extern void Dinv(const Vector<T>& in, Vector<T>& out);
 
 //prolongate
 template<class T>
-extern void P(const Vector<T>& in, Vector<T>& out);
+extern void prolong(const Vector<T>& in, Vector<T>& out);
 
 //restrict
 template<class T>
-extern void R(const Vector<T>& in, Vector<T>& out);
+extern void restrict(const Vector<T>& in, Vector<T>& out);
 
 }//namespace
 

@@ -32,7 +32,54 @@ template std::vector<float> calc_weights<float>(Vector<float>& in, const std::ve
 template<class T>
 void coarse_op(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
 {
-	std::cout << "Not yet implemented" << std::endl;
+	assert(in.size == out.size);
+	int i; int j;
+
+	//the origin
+	out.data[0] = weights[0]*in(0) + weights[1]*in(1) + weights[1]*in(in.grid.y) + weights[2]*in(in.grid.y+1);
+	//corner opposite the origin
+	out.data[out.grid.x*out.grid.y-1] = weights[0]*in(in.grid.x * in.grid.y - 1) + weights[1]*in( in.grid.x * in.grid.y - 2 ) +
+						weights[1]*in(in.grid.x * in.grid.y - in.grid.x - 1) +
+						weights[2]*in(in.grid.x * in.grid.y - in.grid.x - 2);
+	//corner adjacent to origin
+	out.data[out.grid.x-1] = weights[0]*in(in.grid.x-1) + weights[1]*in(in.grid.x-2) + weights[1]*in(in.grid.x + in.grid.y - 1) +
+					weights[2]*in(in.grid.x + in.grid.y - 2);
+	//corner above origin
+	out.data[out.grid.x*out.grid.y - out.grid.x] = weights[0]*in(in.grid.x*in.grid.y - in.grid.x) + 
+							weights[1]*in( (in.grid.x-1)*in.grid.y - in.grid.x ) + 
+							weights[1]*in(in.grid.x*in.grid.y - in.grid.x + 1) + 
+							weights[2]*in( (in.grid.x-1)*in.grid.y - in.grid.x + 1);
+	//the bottom/top edge
+#pragma omp parallel for
+	for (i = 1; i < out.grid.x - 1; i++) {
+
+		out.data[i] = weights[1]*in(i-1) + weights[1]*in(i+1) + weights[1]*in(i + in.grid.x) +  weights[0]*in(i) + 
+				weights[2]*in(i + in.grid.x - 1) + weights[2]*in(i + in.grid.x + 1);
+		out.data[i + (out.grid.y-1)*out.grid.x] = weights[1]*in(i-1 + (in.grid.y-1)*in.grid.x) + weights[1]*in(i+1 + (in.grid.y-1)*in.grid.x) + weights[1]*in(i + (in.grid.y-2)*in.grid.x) + weights[0]*in(i + (in.grid.y-1)*in.grid.x) + 
+			weights[2]*in(i-1 + (in.grid.y-2)*in.grid.x) + weights[2]*in(i+1 + (in.grid.y-2)*in.grid.x);
+
+	}
+
+	//the left/right edge
+#pragma omp parallel for
+	for (i = 1; i < out.grid.y - 1; i++) {
+
+		 out.data[(i+1)*out.grid.x-1] = weights[1]*in(i*in.grid.x - 1) + weights[1]*in((i+1)*in.grid.x - 2) + weights[1]*in((i+2)*in.grid.x - 1) + weights[0]*in((i+1)*in.grid.x - 1) + weights[2]*in(i*in.grid.x - 2) + weights[2]*in((i+2)*in.grid.x - 2);
+		 
+		out.data[(i-1)*out.grid.x + out.grid.x] = weights[1]*in(i*in.grid.x + in.grid.x) + weights[1]*in( (i-2)*in.grid.x + in.grid.x) + weights[1]*in( (i-1)*in.grid.x + in.grid.x + 1) + weights[0]*in((i-1)*in.grid.x + in.grid.x) + weights[2]*in( (i-2)*in.grid.x + in.grid.x + 1) + weights[2]*in(i*in.grid.x + in.grid.x + 1);
+	}
+
+	//now the interior points
+#pragma omp parallel for private(i) shared(j) collapse(2)
+	        for (j = 1; j < in.grid.y - 1; j++){
+			for (i = 1; i < in.grid.x - 1; i++) {
+				out.data[i + j*out.grid.x] = weights[1]*in(i + (j-1)*in.grid.x) + weights[1]*in( (i-1) + j*in.grid.x) + weights[0]*in(i + j*in.grid.x) + weights[1]*in( (i+1) + j*in.grid.x ) + weights[1]*in(i + (j+1)*in.grid.x) +
+					weights[2]*in(i + (j+1)*in.grid.x + 1) + weights[2]*in(i + (j+1)*in.grid.x - 1) +
+					weights[2]*in(i + (j-1)*in.grid.x - 1) +  weights[2]*in(i + (j-1)*in.grid.x + 1);
+			}
+
+		}
+
 	
 }
 template void coarse_op<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& weights);
@@ -90,22 +137,32 @@ void LU(const Vector<T>& in, Vector<T>& out)
         assert(in.size == out.size);
         int i; int j;
         T mone = static_cast<T>(-1.0);
-	out.data[0] = mone*(in(1) + in(in.grid.y));
-	out.data[out.grid.x*out.grid.y-1] = mone*( in(in.grid.x * in.grid.y - in.grid.x - 1) + in( in.grid.x * in.grid.y - 2 ));
-	out.data[out.grid.x-1] = mone*(in(in.grid.x-2) + in(in.grid.x + in.grid.y - 1));
-	out.data[out.grid.x*out.grid.y - out.grid.x] = mone*(in( (in.grid.x-1)*in.grid.y ) + in(in.grid.x*in.grid.y - in.grid.x + 1));
+
+        //the origin
+        out.data[0] = mone*(in(1) + in(in.grid.y) );
+        //corner opposite the origin
+        out.data[out.grid.x*out.grid.y-1] = mone*( in(in.grid.x * in.grid.y - in.grid.x - 1) + in( in.grid.x * in.grid.y - 2 ) );
+        //corner adjacent to origin
+        out.data[out.grid.x-1] = mone*(in(in.grid.x-2) + in(in.grid.x + in.grid.y - 1));
+        //corner above the origin
+        out.data[out.grid.x*out.grid.y - out.grid.x] = mone*(in( (in.grid.x-1)*in.grid.y - in.grid.x ) + in(in.grid.x*in.grid.y - in.grid.x + 1) );
+        //the bottom/top edge
 #pragma omp parallel for
-	for (i = 1; i < in.grid.x-1; i++)
-	{
-	out.data[i] = mone*(in(i-1) + in(i+1) + in(i + in.grid.x));
-	out.data[i + (out.grid.y-1)*out.grid.x] = mone*(in(i-1 + (in.grid.y-1)*in.grid.x) + in(i+1 + (in.grid.y-1)*in.grid.x) + in(i + (in.grid.y-2)*in.grid.x));
-	}
+        for (i = 1; i < in.grid.x-1; i++)
+        {
+        out.data[i] = mone*(in(i-1) + in(i+1) + in(i + in.grid.x));
+        out.data[i + (out.grid.y-1)*out.grid.x] = mone*(in(i-1 + (in.grid.y-1)*in.grid.x) + in(i+1 + (in.grid.y-1)*in.grid.x) + in(i + (in.grid.y-2)*in.grid.x) );
+        }
+
+        //the right/left edge
 #pragma omp parallel for
-	for (i = 1; i < in.grid.y-1; i++)
-	{
-	out.data[(i+1)*out.grid.x-1] = mone*(in(i*in.grid.x - 1) + in((i+1)*in.grid.x-2) + in((i+2)*in.grid.x-1));
-	out.data[(i-1)*out.grid.x + out.grid.x] = mone*(in(i*in.grid.x + in.grid.x) + in( (i-2)*in.grid.x + in.grid.x) + in( (i-1)*in.grid.x + in.grid.x - 1));
-	}	
+        for (i = 1; i < in.grid.y-1; i++)
+        {
+        out.data[(i+1)*out.grid.x-1] = mone*(in(i*in.grid.x - 1) + in((i+1)*in.grid.x-2) + in((i+2)*in.grid.x-1) );
+        out.data[(i-1)*out.grid.x + out.grid.x] = mone*(in(i*in.grid.x + in.grid.x) + in( (i-2)*in.grid.x + in.grid.x) + in( (i-1)*in.grid.x + in.grid.x + 1) );
+        }
+
+        //now the interior nodes
 #pragma omp parallel for private(i) shared(j) collapse(2)
         for (j = 1; j < in.grid.y - 1; j++){
                 for (i = 1; i < in.grid.x - 1; i++) {
@@ -122,8 +179,52 @@ template void LU<double>(const Vector<double>& in, Vector<double>& out);
 template<class T>
 void coarse_LU(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
 {
-	std::cout << "Not yet Implemented" << std::endl;
+        assert(in.size == out.size);
+        int i; int j;
 
+        //the origin
+        out.data[0] = weights[1]*in(1) + weights[1]*in(in.grid.y) + weights[2]*in(in.grid.y+1);
+        //corner opposite the origin
+        out.data[out.grid.x*out.grid.y-1] = weights[1]*in( in.grid.x * in.grid.y - 2 ) +
+                                                weights[1]*in(in.grid.x * in.grid.y - in.grid.x - 1) +
+                                                weights[2]*in(in.grid.x * in.grid.y - in.grid.x - 2);
+        //corner adjacent to origin
+        out.data[out.grid.x-1] =  weights[1]*in(in.grid.x-2) + weights[1]*in(in.grid.x + in.grid.y - 1) +
+                                        weights[2]*in(in.grid.x + in.grid.y - 2);
+        //corner above origin
+        out.data[out.grid.x*out.grid.y - out.grid.x] =  weights[1]*in( (in.grid.x-1)*in.grid.y - in.grid.x ) +
+                                                        weights[1]*in(in.grid.x*in.grid.y - in.grid.x + 1) +
+                                                        weights[2]*in( (in.grid.x-1)*in.grid.y - in.grid.x + 1);
+        //the bottom/top edge
+#pragma omp parallel for
+        for (i = 1; i < out.grid.x - 1; i++) {
+
+                out.data[i] = weights[1]*in(i-1) + weights[1]*in(i+1) + weights[1]*in(i + in.grid.x) +
+                                weights[2]*in(i + in.grid.x - 1) + weights[2]*in(i + in.grid.x + 1);
+                out.data[i + (out.grid.y-1)*out.grid.x] = weights[1]*in(i-1 + (in.grid.y-1)*in.grid.x) + weights[1]*in(i+1 + (in.grid.y-1)*in.grid.x) + weights[1]*in(i + (in.grid.y-2)*in.grid.x) +
+                        weights[2]*in(i-1 + (in.grid.y-2)*in.grid.x) + weights[2]*in(i+1 + (in.grid.y-2)*in.grid.x);
+
+        }
+
+        //the left/right edge
+#pragma omp parallel for
+        for (i = 1; i < out.grid.y - 1; i++) {
+
+                 out.data[(i+1)*out.grid.x-1] = weights[1]*in(i*in.grid.x - 1) + weights[1]*in((i+1)*in.grid.x - 2) + weights[1]*in((i+2)*in.grid.x - 1) + weights[2]*in(i*in.grid.x - 2) + weights[2]*in((i+2)*in.grid.x - 2);
+
+                out.data[(i-1)*out.grid.x + out.grid.x] = weights[1]*in(i*in.grid.x + in.grid.x) + weights[1]*in( (i-2)*in.grid.x + in.grid.x) + weights[1]*in( (i-1)*in.grid.x + in.grid.x + 1) + weights[2]*in( (i-2)*in.grid.x + in.grid.x + 1) + weights[2]*in(i*in.grid.x + in.grid.x + 1);
+        }
+
+        //now the interior points
+#pragma omp parallel for private(i) shared(j) collapse(2)
+                for (j = 1; j < in.grid.y - 1; j++){
+                        for (i = 1; i < in.grid.x - 1; i++) {
+                                out.data[i + j*out.grid.x] = weights[1]*in(i + (j-1)*in.grid.x) + weights[1]*in( (i-1) + j*in.grid.x) + weights[1]*in( (i+1) + j*in.grid.x ) + weights[1]*in(i + (j+1)*in.grid.x) +
+                                        weights[2]*in(i + (j+1)*in.grid.x + 1) + weights[2]*in(i + (j+1)*in.grid.x - 1) +
+                                        weights[2]*in(i + (j-1)*in.grid.x - 1) +  weights[2]*in(i + (j-1)*in.grid.x + 1);
+                        }
+
+                }
 }
 template void coarse_LU<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& weights);
 template void coarse_LU<double>(const Vector<double>& in, Vector<double>& out, std::vector<double>& weights);
@@ -142,9 +243,20 @@ void Dinv(const Vector<T>& in, Vector<T>& out)
 template void Dinv<float>(const Vector<float>& in, Vector<float>& out);
 template void Dinv<double>(const Vector<double>& in, Vector<double>& out);
 
+template<class T>
+void coarse_Dinv(const Vector<T>& in, Vector<T>& out, std::vector<T>& diag)
+{
+	assert(in.size == out.size);
+	int i;
+#pragma omp parallel for
+	for (i = 0; i < out.size; i++) { out.data[i] = (1.0/diag[0])*in(i); }
+}
+template void coarse_Dinv<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& diag);
+template void coarse_Dinv<double>(const Vector<double>& in, Vector<double>& out, std::vector<double>& diag);
+
 //prolongator
 template <class T>
-void P(const Vector<T>& in, Vector<T>& out)
+void prolong(const Vector<T>& in, Vector<T>& out)
 {
 	int i; int j;
 
@@ -201,12 +313,12 @@ void P(const Vector<T>& in, Vector<T>& out)
 		}
 	}
 }
-template void P<float>(const Vector<float>& in, Vector<float>& out);
-template void P<double>(const Vector<double>& in, Vector<double>& out);
+template void prolong<float>(const Vector<float>& in, Vector<float>& out);
+template void prolong<double>(const Vector<double>& in, Vector<double>& out);
 
 //restrictor
 template<class T>
-void R(const Vector<T>& in, Vector<T>& out)
+void restrict(const Vector<T>& in, Vector<T>& out)
 {
 	//right now this only does nearest neighbor on the edges
 	//might need to implement next nearest neighbor
@@ -231,7 +343,7 @@ void R(const Vector<T>& in, Vector<T>& out)
 
 
 }
-template void R<float>(const Vector<float>& in, Vector<float>& out);
-template void R<double>(const Vector<double>& in, Vector<double>& out);
+template void restrict<float>(const Vector<float>& in, Vector<float>& out);
+template void restrict<double>(const Vector<double>& in, Vector<double>& out);
 }//namespace
 
