@@ -7,9 +7,9 @@
 namespace Poisson {
 
 //save some typing
-using std::function func;
+using func = std::function;
 
-template<class T>
+template<class T, class M, class U>
 struct Level {
 
 	//the level
@@ -17,13 +17,13 @@ struct Level {
 	//the grid at the level el
 	Grid grid;
 	//the matrix
-	func<void(const Vector<T>&,Vector<T>&)> A;
+	M<T> A;
 	//the prolongator
 	func<void(const Vector<T>&,Vector<T>&)> P;
 	//the restrictor
 	func<void(const Vector<T>&,Vector<T>&)> R;
 	//the smoother
-	Smoother<T> S;
+	U<T> S;
 	//the solution at the level el
 	Vector<T> x;
 
