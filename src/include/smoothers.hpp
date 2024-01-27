@@ -36,6 +36,9 @@ class Smoother {
                         //temporaries. Maybe a better way?
                         Vector<T> tmp1(out.grid);
                         Vector<T> tmp2(out.grid);
+			Vector<T> tmp3(out.grid);
+			Vector<T> tmp4(out.grid);
+			Vector<T> tmp5(out.grid);
                         Vector<T> x0(out.grid);
 			Vector<T> bnew(out.grid);
 			Vector<T> bin(out.grid);
@@ -52,14 +55,14 @@ class Smoother {
 			int i = 0;
 			while (i <= iters && rn >= target)
                         {
-                                lu(x0,tmp1);
-                                tmp2 = bnew - tmp1;
-                                dinv(tmp2,tmp1);
-                                x0 = tmp1;
+                                lu(x0,tmp2);
+                                tmp3 = bnew - tmp2;
+                                dinv(tmp3,tmp4);
+                                x0 = tmp4;
 
 				xin = x0 + out;
-				A(xin,tmp2);
-				r = tmp2 - bin;
+				A(xin,tmp5);
+				r = bin - tmp5;
 				rn = std::sqrt(r.norm2());
 				std::cout << "Jacobi Iteration: " << i << ", ||r||_2 = " << rn << std::endl;
 				i++;
@@ -68,7 +71,7 @@ class Smoother {
 
                 }
 
-                ~Smoother(){}
+                ~Smoother<T>(){}
 
 };
 
@@ -100,6 +103,9 @@ class CoarseSmoother {
                         //temporaries. Maybe a better way?
                         Vector<T> tmp1(out.grid);
                         Vector<T> tmp2(out.grid);
+                        Vector<T> tmp3(out.grid);
+                        Vector<T> tmp4(out.grid);
+                        Vector<T> tmp5(out.grid);
                         Vector<T> x0(out.grid);
                         Vector<T> bnew(out.grid);
                         Vector<T> bin(out.grid);
@@ -116,16 +122,15 @@ class CoarseSmoother {
                         int i = 0;
                         while (i <= iters && rn >= target)
                         {
-                                lu(x0,tmp1,weights);
-                                tmp2 = bnew - tmp1;
-                                dinv(tmp2,tmp1,weights);
-                                x0 = tmp1;
+                                lu(x0,tmp2,weights);
+                                tmp3 = bnew - tmp2;
+                                dinv(tmp3,tmp4,weights);
+                                x0 = tmp4;
 
                                 xin = x0 + out;
-                                A(xin,tmp2,weights);
-                                r = tmp2 - bin;
+                                A(xin,tmp5,weights);
+                                r = bin - tmp5;
                                 rn = std::sqrt(r.norm2());
-                                std::cout << "Coarse Jacobi Iteration: " << i << ", ||r||_2 = " << rn << std::endl;
                                 i++;
                         }
                         out = xin;

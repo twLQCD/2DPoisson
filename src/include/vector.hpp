@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iomanip>
 #include <iostream>
 #include <random>
 #include <cassert>
@@ -42,7 +43,7 @@ class Vector {
 		Vector<T>(Grid& grid, T* data) : grid(grid), data(data) {size = grid.x * grid.y;};
 
 		//prints out the elements of the vector
-		void print() { for (int i = 0; i < size; i++) std::cout << data[i] << std::endl; }
+		void print() { for (int i = 0; i < size; i++) std::cout << std::setprecision(std::numeric_limits<T>::max_digits10) << data[i] << std::endl; }
 
 		//set to zero
 		void zeros()
