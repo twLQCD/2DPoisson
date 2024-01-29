@@ -19,15 +19,13 @@ struct Grid {
 	//dim in y direction
 	int y;
 
-	//the isotropic spacing
-
-	//default cunstructor
+	//default constructor
 	Grid(){};
 
 	//parameterized constructor
 	Grid(int a, int b) : p(a), q(b)
 	{
-		//assert(a == b);
+		assert( a >= 3 && b >= 3);
 		x = static_cast<int>(pow(2.0, a) - 1);
 		y = static_cast<int>(pow(2.0, b) - 1);
 	//keeping it isotropic

@@ -141,7 +141,4 @@ class CoarseSmoother {
 
 };
 
-template<class T>
-extern void jacobi(Vector<T>& in, Vector<T>& out, int iters, std::function<void(const Vector<T>&,Vector<T>&)>& LU, std::function<void(const Vector<T>&,Vector<T>&)>& Dinv);
-
 } //namespace
