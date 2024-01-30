@@ -42,6 +42,15 @@ class Vector {
 		//parameterize constructor
 		Vector<T>(Grid& grid, T* data) : grid(grid), data(data) {size = grid.x * grid.y;};
 
+		//to be used when default constructor is called
+		void create(Grid& grid_t)
+		{
+		 grid = grid_t;
+		 size = grid.x*grid.y;
+		 data = new T[size];
+		 zeros();
+		}
+
 		//prints out the elements of the vector
 		void print() { for (int i = 0; i < size; i++) std::cout << std::setprecision(std::numeric_limits<T>::max_digits10) << data[i] << std::endl; }
 

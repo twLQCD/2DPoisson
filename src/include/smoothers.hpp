@@ -131,6 +131,7 @@ class CoarseSmoother {
                                 A(xin,tmp5,weights);
                                 r = bin - tmp5;
                                 rn = std::sqrt(r.norm2());
+				std::cout << "Coarse Jacobi: iter = " << i << " with residual norm " << rn << std::endl;
                                 i++;
                         }
                         out = xin;

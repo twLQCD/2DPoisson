@@ -32,11 +32,11 @@ struct Grid {
 	//on the boundary [0,1] x [0,1]
 	}
 
-	void operator=(Grid& grid)
-	{ 	p = grid.p;
-		q = grid.q;
-		x = grid.x;
-		y = grid.y;
+	void operator=(Grid& grid_t)
+	{ 	p = grid_t.p;
+		q = grid_t.q;
+		x = grid_t.x;
+		y = grid_t.y;
 	}
 	//destructor
 	~Grid(){};
