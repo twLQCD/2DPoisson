@@ -64,7 +64,7 @@ class Smoother {
 				A(xin,tmp5);
 				r = bin - tmp5;
 				rn = std::sqrt(r.norm2());
-				std::cout << "Jacobi Iteration: " << i << ", ||r||_2 = " << rn << std::endl;
+				//std::cout << "Jacobi Iteration: " << i << ", ||r||_2 = " << rn << std::endl;
 				i++;
                         }
 			out = xin;
@@ -97,6 +97,19 @@ class CoarseSmoother {
                         iters(iters),
                         target(target)
                 {}
+
+		//for use with default constructor
+		void create(std::function<void(const Vector<T>&,Vector<T>&,std::vector<T>&)>& lu_t, std::function<void(const Vector<T>&,Vector<T>&,std::vector<T>&)>& dinv_t, std::function<void(const Vector<T>&,Vector<T>&,std::vector<T>&)>& A_t, std::vector<T>& weights_t, int iters_t, T target_t)
+		{
+
+			lu = lu_t;
+			dinv = dinv_t;
+			A = A_t;
+			weights = weights_t;
+			iters = iters_t;
+			target = target_t;
+
+		}
 
                 void operator()(const Vector<T>& in, Vector<T>& out)
                 {
@@ -131,7 +144,7 @@ class CoarseSmoother {
                                 A(xin,tmp5,weights);
                                 r = bin - tmp5;
                                 rn = std::sqrt(r.norm2());
-				std::cout << "Coarse Jacobi: iter = " << i << " with residual norm " << rn << std::endl;
+				//std::cout << "Coarse Jacobi: iter = " << i << " with residual norm " << rn << std::endl;
                                 i++;
                         }
                         out = xin;

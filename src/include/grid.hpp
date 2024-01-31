@@ -32,7 +32,7 @@ struct Grid {
 	//on the boundary [0,1] x [0,1]
 	}
 
-	void operator=(Grid& grid_t)
+	void operator=(const Grid& grid_t)
 	{ 	p = grid_t.p;
 		q = grid_t.q;
 		x = grid_t.x;

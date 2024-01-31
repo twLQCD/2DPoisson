@@ -8,15 +8,17 @@ namespace Poisson {
 //there must be a better way to do this!
 //nodes needs to be ordered: origin -> x neighbor -> y neighbor -> x,y neighbor
 template<class T>
-std::vector<T> calc_weights(Vector<T>& in, const std::vector<int> nodes, std::function<void(const Vector<T>&,Vector<T>&)>& op, std::function<void(const Vector<T>&,Vector<T>&)>& R, std::function<void(const Vector<T>&,Vector<T>&)>& P)
+std::vector<T> calc_weights(Grid& grid, std::function<void(const Vector<T>&,Vector<T>&)>& op, std::function<void(const Vector<T>&,Vector<T>&)>& P, std::function<void(const Vector<T>&,Vector<T>&)>& R)
 {
+	Vector<T> x(grid);
+	std::vector<int> nodes = {0,1,x.grid.x+1};
 	std::vector<T> weights(nodes.size());
-	in.unit(0);
+	x.unit(0);
 
-	Vector<T> tmp1(in.grid);
-	P(in,tmp1);
-	op(tmp1,in);
-	R(in,tmp1);
+	Vector<T> tmp1(x.grid);
+	P(x,tmp1);
+	op(tmp1,x);
+	R(x,tmp1);
 	for (int i = 0; i < nodes.size(); i++)
 	{
 		weights[i] = tmp1(nodes[i]);
@@ -24,9 +26,32 @@ std::vector<T> calc_weights(Vector<T>& in, const std::vector<int> nodes, std::fu
 
 	return weights;
 }
-template std::vector<double> calc_weights<double>(Vector<double>& in, const std::vector<int> nodes, std::function<void(const Vector<double>&,Vector<double>&)>& op, std::function<void(const Vector<double>&,Vector<double>&)>& R,  std::function<void(const Vector<double>&,Vector<double>&)>& P);
+template std::vector<double> calc_weights<double>(Grid& grid, std::function<void(const Vector<double>&,Vector<double>&)>& op, std::function<void(const Vector<double>&,Vector<double>&)>& P,  std::function<void(const Vector<double>&,Vector<double>&)>& R);
 
-template std::vector<float> calc_weights<float>(Vector<float>& in, const std::vector<int> nodes, std::function<void(const Vector<float>&,Vector<float>&)>& op, std::function<void(const Vector<float>&,Vector<float>&)>& R, std::function<void(const Vector<float>&,Vector<float>&)>& P);
+template std::vector<float> calc_weights<float>(Grid& grid, std::function<void(const Vector<float>&,Vector<float>&)>& op, std::function<void(const Vector<float>&,Vector<float>&)>& P, std::function<void(const Vector<float>&,Vector<float>&)>& R);
+
+template<class T>
+std::vector<T> calc_coarse_weights(Grid& grid, std::function<void(const Vector<T>&,Vector<T>&,std::vector<T>&)>& op, std::vector<T>& prev_coeffs, std::function<void(const Vector<T>&,Vector<T>&)>& P, std::function<void(const Vector<T>&,Vector<T>&)>& R)
+{
+        Vector<T> x(grid);
+        std::vector<int> nodes = {0,1,x.grid.x+1};
+        std::vector<T> weights(nodes.size());
+        x.unit(0);
+
+        Vector<T> tmp1(x.grid);
+        P(x,tmp1);
+        op(tmp1,x,prev_coeffs);
+        R(x,tmp1);
+        for (int i = 0; i < nodes.size(); i++)
+        {
+                weights[i] = tmp1(nodes[i]);
+        }
+
+        return weights;
+}
+template std::vector<double> calc_coarse_weights<double>(Grid& grid, std::function<void(const Vector<double>&,Vector<double>&,std::vector<double>&)>& op, std::vector<double>& prev_coeffs, std::function<void(const Vector<double>&,Vector<double>&)>& P,  std::function<void(const Vector<double>&,Vector<double>&)>& R);
+
+template std::vector<float> calc_coarse_weights<float>(Grid& grid, std::function<void(const Vector<float>&,Vector<float>&,std::vector<float>&)>& op, std::vector<float>& prev_coeffs, std::function<void(const Vector<float>&,Vector<float>&)>& P, std::function<void(const Vector<float>&,Vector<float>&)>& R);
 
 //the coarse matvec
 template<class T>
@@ -345,5 +370,68 @@ void restrict(const Vector<T>& in, Vector<T>& out)
 }
 template void restrict<float>(const Vector<float>& in, Vector<float>& out);
 template void restrict<double>(const Vector<double>& in, Vector<double>& out);
-}//namespace
 
+//set up the vcycle
+template<class T>
+Vcycle<T> setup(int p, int q, int smooth_iters, T smooth_target, int coarse_iters, T coarse_target)
+{
+        int min_level = 3;
+        int num_levels = p - min_level + 1;
+
+        //set up the fine grid independently
+        Grid grid_f(p,q);
+
+        std::cout << "Fine grid is " << grid_f.x << " x " << grid_f.y << std::endl;
+
+
+        std::function<void(const Vector<T>&, Vector<T>&)> A = op<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> P = prolong<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> R = restrict<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> lu = LU<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> dinv = Dinv<T>;
+
+        int el = 0;
+        Smoother<T> s_f(lu,dinv,A,smooth_iters,smooth_target);
+        std::vector<T> foo(3);
+
+        auto fine_level = std::make_shared<Level<T,std::function<void(const Vector<T>&, Vector<T>&)>,Smoother<T>>>(el, grid_f, A, foo, P, R, s_f);
+        auto coarse_levels = std::make_shared<std::vector<Level<T,std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)>,CoarseSmoother<T>>>>(num_levels - 1);
+
+        for (int i = 0; i < num_levels - 1; i++) {
+
+                p -= 1; q -= 1;
+                el += 1;
+
+                Grid grid_c(p,q);
+                std::vector<T> weights(3);
+                if ( i == 0) {
+                        weights = calc_weights<T>(grid_c, A, P, R);
+                } else {
+                        weights = calc_coarse_weights<T>(grid_c, (*coarse_levels)[i-1].A, (*coarse_levels)[i-1].weights, P, R);
+                }
+
+                std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)> Ac = coarse_op<T>;
+                std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)> luc = coarse_LU<T>;
+                std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)> dinvc = coarse_Dinv<T>;
+                CoarseSmoother<T> s_c;
+
+                if ( i == num_levels - 2) {
+                        s_c.create(luc,dinvc,Ac,weights,coarse_iters,coarse_target);
+                } else {
+                        s_c.create(luc,dinvc,Ac,weights,smooth_iters,smooth_target);
+                }
+                (*coarse_levels)[i].create(el, grid_c, Ac, weights, P, R, s_c);
+
+        }
+
+        Vcycle<T> vcycle;
+        vcycle.num_levels = num_levels;
+        vcycle.fine_level = fine_level;
+        vcycle.coarse_levels = coarse_levels;
+        return vcycle;
+
+
+}
+template Vcycle<double> setup<double>(int p, int q, int smooth_iters, double smooth_target, int coarse_iters, double coarse_target);
+template Vcycle<float> setup<float>(int p, int q, int smoother_iters, float smooth_target, int coarse_iters, float coarse_target);
+} //namespace

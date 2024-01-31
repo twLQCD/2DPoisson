@@ -43,7 +43,7 @@ class Vector {
 		Vector<T>(Grid& grid, T* data) : grid(grid), data(data) {size = grid.x * grid.y;};
 
 		//to be used when default constructor is called
-		void create(Grid& grid_t)
+		void create(const Grid& grid_t)
 		{
 		 grid = grid_t;
 		 size = grid.x*grid.y;
