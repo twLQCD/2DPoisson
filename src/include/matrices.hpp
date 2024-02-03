@@ -21,9 +21,15 @@ extern std::vector<T> calc_coarse_weights(Grid& grid, std::function<void(const V
 template<class T>
 extern void op(const Vector<T>& in, Vector<T>& out);
 
+template<class T>
+extern void op2(const Vector<T>& in, Vector<T>& out, const T eps);
+
 //applies the coarse grid matrix matvec
 template<class T>
 extern void coarse_op(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights);
+
+template<class T>
+extern void coarse_op2(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights);
 
 //applies (L+U) of A
 template<class T>
@@ -45,9 +51,15 @@ extern void Dinv(const Vector<T>& in, Vector<T>& out);
 template<class T>
 extern void prolong(const Vector<T>& in, Vector<T>& out);
 
+template<class T>
+extern void prolong2(const Vector<T>& in, Vector<T>& out);
+
 //restrict
 template<class T>
 extern void restrict(const Vector<T>& in, Vector<T>& out);
+
+template<class T>
+extern void restrict2(const Vector<T>& in, Vector<T>& out);
 
 //the multigrid setup
 template<class T>

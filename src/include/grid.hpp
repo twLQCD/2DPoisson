@@ -26,8 +26,11 @@ struct Grid {
 	Grid(int a, int b) : p(a), q(b)
 	{
 		assert( a >= 3 && b >= 3);
-		x = static_cast<int>(pow(2.0, a) - 1);
-		y = static_cast<int>(pow(2.0, b) - 1);
+		//this was previously pow(2.0, a) - 1
+		//but I have changed it to pow(2.0, a) + 1
+		//as this is easier for periodic boundary conditions
+		x = static_cast<int>(pow(2.0, a) + 1);
+		y = static_cast<int>(pow(2.0, b) + 1);
 	//keeping it isotropic
 	//on the boundary [0,1] x [0,1]
 	}

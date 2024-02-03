@@ -5,8 +5,13 @@
 
 namespace Poisson {
 
+int mod(int i, int dim)
+{
+	int a;
+	return a = (i%dim == -1) ? dim - 1 : i%dim;
+}
+
 //there must be a better way to do this!
-//nodes needs to be ordered: origin -> x neighbor -> y neighbor -> x,y neighbor
 template<class T>
 std::vector<T> calc_weights(Grid& grid, std::function<void(const Vector<T>&,Vector<T>&)>& op, std::function<void(const Vector<T>&,Vector<T>&)>& P, std::function<void(const Vector<T>&,Vector<T>&)>& R)
 {
@@ -155,6 +160,48 @@ void op(const Vector<T>& in, Vector<T>& out)
 template void op<float>(const Vector<float>& in, Vector<float>& out);
 template void op<double>(const Vector<double>& in, Vector<double>& out);
 
+template<class T>
+void op2(const Vector<T>& in, Vector<T>& out, const T eps)
+{
+	assert(in.size == out.size);
+        int i; int j;
+        T four = static_cast<T>(4.0) + eps;
+        T mone = static_cast<T>(-1.0);
+#pragma omp parallel for collapse(2)
+        for (j = 0; j < in.grid.y; j++){
+                for (i = 0; i < in.grid.x; i++) {
+                        out.data[mod(i,out.grid.x) + mod(j,out.grid.y)*out.grid.x] = (mone)*(in( mod(i,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x) + in( mod(i-1,in.grid.x) + mod(j,in.grid.y)*in.grid.x) - four*in( mod(i,in.grid.x) + mod(j,in.grid.y)*in.grid.x) + in( mod(i+1,in.grid.x) + mod(j,in.grid.y)*in.grid.x ) + in( mod(i,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x));
+                }
+
+        }
+}
+template void op2<float>(const Vector<float>& in, Vector<float>& out, const float eps);
+template void op2<double>(const Vector<double>& in, Vector<double>& out, const double eps);
+
+template<class T>
+void coarse_op2(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
+{
+        assert(in.size == out.size);
+        int i; int j;
+#pragma omp parallel for collapse(2)
+                for (j = 0; j < in.grid.y; j++){
+                        for (i = 0; i < in.grid.x; i++) {
+                                out.data[mod(i,out.grid.x) + mod(j,out.grid.y)*out.grid.x] = weights[1]*in( mod(i,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x) + 
+							weights[1]*in( mod(i-1,in.grid.x) + mod(j,in.grid.y)*in.grid.x) + 
+							weights[0]*in( mod(i,in.grid.x) + mod(j,in.grid.y)*in.grid.x) + 
+							weights[1]*in( mod(i+1,in.grid.x) + mod(j,in.grid.y)*in.grid.x ) + 
+							weights[1]*in(mod(i,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x) +
+                                        		weights[2]*in( mod(i-1,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x) + 
+							weights[2]*in( mod(i+1,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x) +
+                                        		weights[2]*in( mod(i-1,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x) +  
+							weights[2]*in(mod(i+1,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x);
+                        }
+
+                }
+}
+template void coarse_op2<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& weights);
+template void coarse_op2<double>(const Vector<double>& in, Vector<double>& out, std::vector<double>& weights);
+
 //applies the lower plus upper part of the matrix A
 template<class T>
 void LU(const Vector<T>& in, Vector<T>& out)
@@ -287,31 +334,23 @@ void prolong(const Vector<T>& in, Vector<T>& out)
 
 	//do the corners first
 	out.data[0] = 0.25*in(0);
-	//std::cout << 0 << std::endl;
         //out.data[out.grid.x*out.grid.y-1] = 0.25*in(in.grid.x*in.grid.y-1);
-	//std::cout << out.grid.x*out.grid.y-1 << std::endl;
         //out.data[out.grid.x-1] = 0.25*in(in.grid.x-1);
-	//std::cout << out.grid.x-1 << std::endl;
         //out.data[out.grid.x*out.grid.y - out.grid.x] = 0.25*in(in.grid.x*in.grid.y - in.grid.x);
-	//std::cout << out.grid.x*out.grid.y - out.grid.x << std::endl;
 
 	//bottom/top edges. using the fact that ints will be rounded down
 #pragma omp parallel for
 	for (i = 1; i < out.grid.x - 1; i+=2){ //was out.grid.x - 1
 		//bottom
 		out.data[i] = 0.5*in(i/2);
-		//std::cout << "Fine grid point is " << i << ", coarse grid points are " << i/2 << std::endl;
 		if (i+1 == out.grid.x-1) {
 		out.data[i+1] = 0.25*(in(i/2)); //problem is here I think
 		} else {
 		out.data[i+1] = 0.25*(in(i/2) + in(i/2 + 1));
 		}
-		//std::cout << "Fine grid point is " << i+1 << ", coarse grid points are " << i/2 << "," << i/2 + 1 << std::endl;
 		//top
 		out.data[i + (out.grid.y-1)*out.grid.x] = 0.5*in( (i/2) + (in.grid.y-1)*in.grid.x);
-		//std::cout << "Fine grid point is " << i + (out.grid.y-1)*out.grid.x << ", coarse grid points are " << (i/2) + (in.grid.y-1)*in.grid.x << std::endl;
 		out.data[i+1 + (out.grid.y-1)*out.grid.x] = 0.25*(in( (i/2) + (in.grid.y-1)*in.grid.x) + in(i/2 + 1 + (in.grid.y-1)*in.grid.x));
-		//std::cout << "Fine grid point is " << i+1 + (out.grid.y-1)*out.grid.x << ", coarse grid points are " << (i/2) + (in.grid.y-1)*in.grid.x << "," << i/2 + 1 + (in.grid.y-1)*in.grid.x << std::endl;
 	}
 
 	//left/right edge
@@ -319,14 +358,10 @@ void prolong(const Vector<T>& in, Vector<T>& out)
 	for (j = 1; j < out.grid.y - 1; j+=2){ //was  out.grid.y - 1
 		//left edge
 		out.data[j*out.grid.x] = 0.5*in((j/2)*in.grid.x);
-		//std::cout << j*out.grid.x << std::endl;
 		out.data[(j+1)*out.grid.x] = 0.25*(in((j/2)*in.grid.x) + in( ((j/2)+1)*in.grid.x));
-		//std::cout << (j+1)*out.grid.x << std::endl;
 		//right edge
 		out.data[(j+1)*out.grid.x-1] = 0.5*in( (j+1)/2*in.grid.x-1);
-		//std::cout << (j+1)*out.grid.x-1 << std::endl;
 		out.data[(j+2)*out.grid.x-1] = 0.25*(in( (j+1)/2*in.grid.x-1) + in( (((j+1)/2)+1)*in.grid.x-1));
-		//std::cout << (j+2)*out.grid.x-1 << std::endl;
 	}
 #pragma omp parallel for collapse(2)
 	for (j = 1; j < out.grid.y-1; j++){
@@ -340,6 +375,177 @@ void prolong(const Vector<T>& in, Vector<T>& out)
 }
 template void prolong<float>(const Vector<float>& in, Vector<float>& out);
 template void prolong<double>(const Vector<double>& in, Vector<double>& out);
+
+template<class T>
+void prolong2(const Vector<T>& in, Vector<T>& out)
+{
+	//first the corners
+	//the origin
+	int i = 0; int j = 0;
+	//std::cout << i + j * out.grid.x << std::endl;
+	out.data[i + j * out.grid.x] = in( mod( i/2, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+	       			       0.5*in( mod( i/2-1, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+				       0.5*in( mod( i/2, in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x ) +
+			               0.25*in( mod( i/2-1, in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x );
+	//lower right corner
+	i = out.grid.x - 1; j = 0;
+	//std::cout << i + j * out.grid.x << std::endl;
+	out.data[i + j * out.grid.x] = in( mod( i/2, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+				       0.5*in( mod( i/2+1, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+				        0.5*in( mod( i/2, in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x ) +
+				       0.25*in( mod( i/2+1, in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x );
+
+	//upper left corner
+	i = 0; j = out.grid.y - 1;
+	//std::cout << i + j * out.grid.x << std::endl;
+	out.data[i + j * out.grid.x] = in( mod( i/2, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+		                       0.5*in( mod( i/2-1, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+				       0.5*in( mod( i/2, in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x ) +
+				       0.25*in( mod( i/2-1, in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x );
+
+	//upper right corner (opposite origin)
+	i = out.grid.x - 1; j = out.grid.y - 1;
+	//std::cout << i + j * out.grid.x << std::endl;
+	out.data[i + j * out.grid.x] = in( mod( i/2, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+				       0.5*in( mod( i/2+1, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+				       0.5*in( mod( i/2, in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x ) +
+				       0.25*in( mod( i/2+1, in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x );
+
+	//now do the edges
+	//bottom edge, odd case
+	j = 0;
+#pragma omp parallel for
+	for (i = 1; i < out.grid.x - 1; i+=2 ) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j * out.grid.x] = 0.5*in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x) + 
+					       0.5*in( mod(i/2+1,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x) + 
+					       0.25*in( mod(i/2,in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x) + 
+					       0.25*in( mod(i/2+1,in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x);
+
+	}
+
+	//bottom edge, even case
+#pragma omp parallel for
+	for (i = 2; i < out.grid.x - 1; i+=2) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j*out.grid.x] = in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) + 
+					     0.5*in( mod(i/2,in.grid.x) + mod(j/2-1,in.grid.y)*in.grid.x );
+
+	}
+
+	//top edge, odd case
+	j = out.grid.y - 1;
+#pragma omp parallel for
+	for (i = 1; i < out.grid.x - 1; i+=2 ) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j * out.grid.x] = 0.5*in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x) +
+					       0.5*in( mod(i/2+1,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x) +
+					       0.25*in( mod(i/2,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x) +
+					       0.25*in( mod(i/2+1,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x);
+
+	}
+
+	//top edge, even case
+#pragma omp parallel for
+	for (i = 2; i < out.grid.x - 1; i +=2 ) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j*out.grid.x] = in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+					    0.5*in( mod(i/2,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x );
+	}
+
+
+	//the left edge, odd case
+	i = 0;
+#pragma omp parallel for
+	for (j = 1; j < out.grid.y - 1; j += 2) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j*out.grid.x] = 0.5*in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) + 
+					     0.5*in( mod(i/2,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x ) + 
+					     0.25*in( mod(i/2 - 1, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+					     0.25*in( mod(i/2 - 1, in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x );		
+
+	}
+
+	//the left edge, even case
+#pragma omp parallel for
+	for ( j = 2; j < out.grid.y - 1; j +=2) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j*out.grid.x] = in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+					    0.5*in( mod(i/2 -1, in.grid.x) + mod(j/2,in.grid.y)*in.grid.x );
+
+	}
+
+	//the right edge, odd case (a little sus)
+	i = out.grid.x - 1;
+#pragma omp parallel for
+	for ( j = 1; j < out.grid.y - 1; j += 2) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j*out.grid.x] = 0.5*in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+			                     0.5*in( mod(i/2,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x ) +
+					     0.25*in( mod(i/2+1,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x) + 
+					     0.25*in( mod(i/2+1,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x);
+	}
+	
+	//the right edge, even case
+#pragma omp parallel for
+	for (j = 2; j < out.grid.y - 1; j +=2) {
+		//std::cout << i + j * out.grid.x << std::endl;
+		out.data[i + j*out.grid.x] = in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+					    0.5*in( mod(i/2+1,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x );
+
+	}
+
+	//now the interior points. breaking it up once again
+	
+	//odd,odd -> 4 neighbors (this is a problem here)
+#pragma omp parallel for
+	for (j = 1; j < out.grid.y - 1; j += 2) {
+		for (i = 1; i < out.grid.x - 1; i += 2) {
+			//std::cout << i + j * out.grid.x << std::endl;
+			out.data[i + j*out.grid.x] = 0.25*( in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) + 
+							   in( mod(i/2+1,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+							   in( mod(i/2,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x ) +
+							   in( mod(i/2+1,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x) );
+
+		}
+	}
+
+	//even,odd (also here)
+#pragma omp parallel for
+	for (j = 1; j < out.grid.y - 1; j += 2) {
+		for (i = 2; i < out.grid.x - 1; i += 2) {
+			//std::cout << i + j * out.grid.x << std::endl;
+			out.data[i + j*out.grid.x] = 0.5*( in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+							  in( mod(i/2,in.grid.x) + mod(j/2+1,in.grid.y)*in.grid.x ) );
+
+		}
+	}
+	
+	//odd,even
+#pragma omp parallel for
+	for (j = 2; j < out.grid.y - 1; j += 2) {
+		for (i = 1; i < out.grid.x - 1; i += 2) {
+			//std::cout << i + j * out.grid.x << std::endl;
+			out.data[i + j*out.grid.x] = 0.5*( in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) +
+							  in( mod(i/2+1,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x ) );
+
+		}
+	}
+	
+	//even,even. direct injection only?
+#pragma omp parallel for
+	for (j = 2; j < out.grid.y - 1; j += 2) {
+		for (i = 2; i < out.grid.x - 1; i += 2) {
+			//std::cout << i + j * out.grid.x << std::endl;
+			out.data[i + j*out.grid.x] = in( mod(i/2,in.grid.x) + mod(j/2,in.grid.y)*in.grid.x );
+
+		}
+	}
+
+
+} 
+template void prolong2<float>(const Vector<float>& in, Vector<float>& out);
+template void prolong2<double>(const Vector<double>& in, Vector<double>& out);
 
 //restrictor
 template<class T>
@@ -370,6 +576,35 @@ void restrict(const Vector<T>& in, Vector<T>& out)
 }
 template void restrict<float>(const Vector<float>& in, Vector<float>& out);
 template void restrict<double>(const Vector<double>& in, Vector<double>& out);
+
+template<class T>
+void restrict2(const Vector<T>& in, Vector<T>& out)
+{
+        //right now this only does nearest neighbor on the edges
+        //might need to implement next nearest neighbor
+        //keeping it this way for now
+        int i; int j;
+
+        //loop over the COARSE interior nodes
+#pragma omp parallel for collapse(2)
+        for (j = 0; j < out.grid.y; j++){
+                for (i = 0; i < out.grid.x; i++) {
+                        out.data[i + j*out.grid.x] = 0.25*in(mod(2*i,in.grid.x) + mod(2*j,in.grid.y)*in.grid.x) //central node
+                                                        + 0.125*in( mod(2*i+1,in.grid.x) + mod(2*j,in.grid.y)*in.grid.x) // -x dir
+                                                        + 0.125*in( mod(2*i,in.grid.x) + mod(2*j+1,in.grid.y)*in.grid.x) // +x dir
+                                                        + 0.125*in( mod(2*i-1,in.grid.x) + mod(2*j,in.grid.y)*in.grid.x) // -y dir
+                                                        + 0.125*in( mod(2*i,in.grid.x) + mod(2*j-1,in.grid.y)*in.grid.x) // +y dir
+                                                        + 0.0625*in( mod(2*i+1,in.grid.x) + mod(2*j+1,in.grid.y)*in.grid.x) // SW corner
+                                                        + 0.0625*in( mod(2*i-1,in.grid.x) + mod(2*j+1,in.grid.y)*in.grid.x) //NW corner
+                                                        + 0.0625*in( mod(2*i-1,in.grid.x) + mod(2*j-1,in.grid.x)*in.grid.x) //NE corner
+                                                        + 0.0625*in( mod(2*i+1,in.grid.x) + mod(2*j-1,in.grid.x)*in.grid.x); //SE corner
+                }
+        }
+
+
+}
+template void restrict2<float>(const Vector<float>& in, Vector<float>& out);
+template void restrict2<double>(const Vector<double>& in, Vector<double>& out);
 
 //set up the vcycle
 template<class T>
