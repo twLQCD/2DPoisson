@@ -25,7 +25,7 @@ struct Grid {
 	//parameterized constructor
 	Grid(int a, int b) : p(a), q(b)
 	{
-		assert( a >= 3 && b >= 3);
+		assert( a >= 2 && b >= 2);
 		//this was previously pow(2.0, a) - 1
 		//but I have changed it to pow(2.0, a) + 1
 		//as this is easier for periodic boundary conditions
