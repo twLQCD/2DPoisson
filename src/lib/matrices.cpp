@@ -36,6 +36,30 @@ template std::vector<double> calc_weights<double>(Grid& grid, std::function<void
 template std::vector<float> calc_weights<float>(Grid& grid, std::function<void(const Vector<float>&,Vector<float>&)>& op, std::function<void(const Vector<float>&,Vector<float>&)>& P, std::function<void(const Vector<float>&,Vector<float>&)>& R);
 
 template<class T>
+std::vector<T> calc_weightsPBC(Grid& grid, std::function<void(const Vector<T>&,Vector<T>&,const T&)>& op, std::function<void(const Vector<T>&,Vector<T>&)>& P, std::function<void(const Vector<T>&,Vector<T>&)>& R, const T& eps)
+{
+        Vector<T> x(grid);
+        std::vector<int> nodes = {0,1,x.grid.x+1};
+        std::vector<T> weights(nodes.size());
+        x.unit(0);
+
+        Vector<T> tmp1(x.grid);
+        P(x,tmp1);
+        opPBC(tmp1,x,eps);
+        R(x,tmp1);
+        for (int i = 0; i < nodes.size(); i++)
+        {
+                weights[i] = tmp1(nodes[i]);
+        }
+
+        return weights;
+}
+template std::vector<double> calc_weightsPBC<double>(Grid& grid, std::function<void(const Vector<double>&,Vector<double>&,const double&)>& op, std::function<void(const Vector<double>&,Vector<double>&)>& P,  std::function<void(const Vector<double>&,Vector<double>&)>& R, const double& eps);
+
+template std::vector<float> calc_weightsPBC<float>(Grid& grid, std::function<void(const Vector<float>&,Vector<float>&,const float&)>& op, std::function<void(const Vector<float>&,Vector<float>&)>& P, std::function<void(const Vector<float>&,Vector<float>&)>& R, const float& eps);
+
+
+template<class T>
 std::vector<T> calc_coarse_weights(Grid& grid, std::function<void(const Vector<T>&,Vector<T>&,std::vector<T>&)>& op, std::vector<T>& prev_coeffs, std::function<void(const Vector<T>&,Vector<T>&)>& P, std::function<void(const Vector<T>&,Vector<T>&)>& R)
 {
         Vector<T> x(grid);
@@ -161,7 +185,7 @@ template void op<float>(const Vector<float>& in, Vector<float>& out);
 template void op<double>(const Vector<double>& in, Vector<double>& out);
 
 template<class T>
-void op2(const Vector<T>& in, Vector<T>& out, const T eps)
+void opPBC(const Vector<T>& in, Vector<T>& out, const T& eps)
 {
 	assert(in.size == out.size);
         int i; int j;
@@ -175,11 +199,29 @@ void op2(const Vector<T>& in, Vector<T>& out, const T eps)
 
         }
 }
-template void op2<float>(const Vector<float>& in, Vector<float>& out, const float eps);
-template void op2<double>(const Vector<double>& in, Vector<double>& out, const double eps);
+template void opPBC<float>(const Vector<float>& in, Vector<float>& out, const float& eps);
+template void opPBC<double>(const Vector<double>& in, Vector<double>& out, const double& eps);
 
 template<class T>
-void coarse_op2(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
+void LUPBC(const Vector<T>& in, Vector<T>& out)
+{
+        assert(in.size == out.size);
+        int i; int j;
+        T mone = static_cast<T>(-1.0);
+#pragma omp parallel for collapse(2)
+        for (j = 0; j < in.grid.y; j++){
+                for (i = 0; i < in.grid.x; i++) {
+                        out.data[mod(i,out.grid.x) + mod(j,out.grid.y)*out.grid.x] = (mone)*(in( mod(i,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x) + in( mod(i-1,in.grid.x) + mod(j,in.grid.y)*in.grid.x) + in( mod(i+1,in.grid.x) + mod(j,in.grid.y)*in.grid.x ) + in( mod(i,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x));
+                }
+
+        }
+}
+template void LUPBC<float>(const Vector<float>& in, Vector<float>& out);
+template void LUPBC<double>(const Vector<double>& in, Vector<double>& out);
+
+
+template<class T>
+void coarse_opPBC(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
 {
         assert(in.size == out.size);
         int i; int j;
@@ -199,8 +241,32 @@ void coarse_op2(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
 
                 }
 }
-template void coarse_op2<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& weights);
-template void coarse_op2<double>(const Vector<double>& in, Vector<double>& out, std::vector<double>& weights);
+template void coarse_opPBC<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& weights);
+template void coarse_opPBC<double>(const Vector<double>& in, Vector<double>& out, std::vector<double>& weights);
+
+
+template<class T>
+void coarse_LUPBC(const Vector<T>& in, Vector<T>& out, std::vector<T>& weights)
+{
+        assert(in.size == out.size);
+        int i; int j;
+#pragma omp parallel for collapse(2)
+                for (j = 0; j < in.grid.y; j++){
+                        for (i = 0; i < in.grid.x; i++) {
+                                out.data[mod(i,out.grid.x) + mod(j,out.grid.y)*out.grid.x] = weights[1]*in( mod(i,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x) +
+                                                        weights[1]*in( mod(i-1,in.grid.x) + mod(j,in.grid.y)*in.grid.x) +
+                                                        weights[1]*in( mod(i+1,in.grid.x) + mod(j,in.grid.y)*in.grid.x ) +
+                                                        weights[1]*in(mod(i,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x) +
+                                                        weights[2]*in( mod(i-1,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x) +
+                                                        weights[2]*in( mod(i+1,in.grid.x) + mod(j+1,in.grid.y)*in.grid.x) +
+                                                        weights[2]*in( mod(i-1,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x) +
+                                                        weights[2]*in(mod(i+1,in.grid.x) + mod(j-1,in.grid.y)*in.grid.x);
+                        }
+
+                }
+}
+template void coarse_LUPBC<float>(const Vector<float>& in, Vector<float>& out, std::vector<float>& weights);
+template void coarse_LUPBC<double>(const Vector<double>& in, Vector<double>& out, std::vector<double>& weights);
 
 //applies the lower plus upper part of the matrix A
 template<class T>
@@ -316,6 +382,19 @@ template void Dinv<float>(const Vector<float>& in, Vector<float>& out);
 template void Dinv<double>(const Vector<double>& in, Vector<double>& out);
 
 template<class T>
+void DinvPBC(const Vector<T>& in, Vector<T>& out, const T& eps)
+{
+        assert(in.size == out.size);
+        int i; //int j;
+        T quart = static_cast<T>(1.0/(4 + eps));
+#pragma omp parallel for
+        for (i = 0; i < out.size; i++) { out.data[i] = quart*in(i); }
+}
+template void DinvPBC<float>(const Vector<float>& in, Vector<float>& out, const float& eps);
+template void DinvPBC<double>(const Vector<double>& in, Vector<double>& out, const double& eps);
+
+
+template<class T>
 void coarse_Dinv(const Vector<T>& in, Vector<T>& out, std::vector<T>& diag)
 {
 	assert(in.size == out.size);
@@ -377,7 +456,7 @@ template void prolong<float>(const Vector<float>& in, Vector<float>& out);
 template void prolong<double>(const Vector<double>& in, Vector<double>& out);
 
 template<class T>
-void prolong2(const Vector<T>& in, Vector<T>& out)
+void prolongPBC(const Vector<T>& in, Vector<T>& out)
 {
 	//first the corners
 	//the origin
@@ -544,8 +623,8 @@ void prolong2(const Vector<T>& in, Vector<T>& out)
 
 
 } 
-template void prolong2<float>(const Vector<float>& in, Vector<float>& out);
-template void prolong2<double>(const Vector<double>& in, Vector<double>& out);
+template void prolongPBC<float>(const Vector<float>& in, Vector<float>& out);
+template void prolongPBC<double>(const Vector<double>& in, Vector<double>& out);
 
 //restrictor
 template<class T>
@@ -578,7 +657,7 @@ template void restrict<float>(const Vector<float>& in, Vector<float>& out);
 template void restrict<double>(const Vector<double>& in, Vector<double>& out);
 
 template<class T>
-void restrict2(const Vector<T>& in, Vector<T>& out)
+void restrictPBC(const Vector<T>& in, Vector<T>& out)
 {
         //right now this only does nearest neighbor on the edges
         //might need to implement next nearest neighbor
@@ -603,8 +682,8 @@ void restrict2(const Vector<T>& in, Vector<T>& out)
 
 
 }
-template void restrict2<float>(const Vector<float>& in, Vector<float>& out);
-template void restrict2<double>(const Vector<double>& in, Vector<double>& out);
+template void restrictPBC<float>(const Vector<float>& in, Vector<float>& out);
+template void restrictPBC<double>(const Vector<double>& in, Vector<double>& out);
 
 //set up the vcycle
 template<class T>
@@ -665,8 +744,74 @@ Vcycle<T> setup(int p, int q, int smooth_iters, T smooth_target, int coarse_iter
         vcycle.coarse_levels = coarse_levels;
         return vcycle;
 
-
 }
+
 template Vcycle<double> setup<double>(int p, int q, int smooth_iters, double smooth_target, int coarse_iters, double coarse_target);
 template Vcycle<float> setup<float>(int p, int q, int smoother_iters, float smooth_target, int coarse_iters, float coarse_target);
+
+template<class T>
+VcyclePBC<T> setupPBC(int p, int q, const T& eps, int smooth_iters, T smooth_target, int coarse_iters, T coarse_target)
+{
+        int min_level = 2;
+        int num_levels = p - min_level + 1;
+
+        //set up the fine grid independently
+        Grid grid_f(p,q);
+
+        //std::cout << "Fine grid is " << grid_f.x << " x " << grid_f.y << std::endl;
+
+
+        std::function<void(const Vector<T>&, Vector<T>&,const T&)> A = opPBC<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> P = prolongPBC<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> R = restrictPBC<T>;
+        std::function<void(const Vector<T>&, Vector<T>&)> lu = LUPBC<T>;
+        std::function<void(const Vector<T>&, Vector<T>&,const T&)> dinv = DinvPBC<T>;
+
+        int el = 0;
+        SmootherPBC<T> s_f(lu,dinv,A,eps,smooth_iters,smooth_target);
+        std::vector<T> foo(3);
+
+        auto fine_level = std::make_shared<Level<T,std::function<void(const Vector<T>&, Vector<T>&,const T&)>,SmootherPBC<T>>>(el, grid_f, A, foo, P, R, s_f);
+        auto coarse_levels = std::make_shared<std::vector<Level<T,std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)>,CoarseSmootherPBC<T>>>>(num_levels - 1);
+
+        for (int i = 0; i < num_levels - 1; i++) {
+
+                p -= 1; q -= 1;
+                el += 1;
+
+                Grid grid_c(p,q);
+                std::vector<T> weights(3);
+                if ( i == 0) {
+                        weights = calc_weightsPBC<T>(grid_c, A, P, R, eps);
+			for ( auto w : weights ) { std::cout << w << std::endl; }
+                } else {
+                        weights = calc_coarse_weights<T>(grid_c, (*coarse_levels)[i-1].A, (*coarse_levels)[i-1].weights, P, R);
+                }
+
+                std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)> Ac = coarse_opPBC<T>;
+                std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)> luc = coarse_LUPBC<T>;
+                std::function<void(const Vector<T>&, Vector<T>&,std::vector<T>&)> dinvc = coarse_Dinv<T>;
+                CoarseSmootherPBC<T> s_c;
+
+                if ( i == num_levels - 2) {
+                        s_c.create(luc,dinvc,Ac,weights,coarse_iters,coarse_target);
+                } else {
+                        s_c.create(luc,dinvc,Ac,weights,smooth_iters,smooth_target);
+                }
+                (*coarse_levels)[i].create(el, grid_c, Ac, weights, P, R, s_c);
+
+        }
+
+        VcyclePBC<T> vcycle;
+        vcycle.num_levels = num_levels;
+        vcycle.fine_level = fine_level;
+        vcycle.coarse_levels = coarse_levels;
+        return vcycle;
+
+}
+
+template VcyclePBC<double> setupPBC<double>(int p, int q, const double& eps, int smooth_iters, double smooth_target, int coarse_iters, double coarse_target);
+template VcyclePBC<float> setupPBC<float>(int p, int q, const float& eps, int smoother_iters, float smooth_target, int coarse_iters, float coarse_target);
+
+
 } //namespace
